@@ -1,11 +1,12 @@
 {
   "name": "@opencircuitlabs/circuit-simulator",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Interactive browser-based DC circuit simulator for learning electronics.",
   "scripts": {
-    "test": "node tests/solver.test.js",
+    "test": "node --test tests/*.test.js",
+    "check": "node --check app.js && node --check solver.js && node --check project.js && node --check sw.js",
     "serve": "npx serve ."
   },
   "keywords": ["electronics", "circuit-simulator", "education", "dc-circuits"],

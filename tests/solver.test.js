@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeCircuit, formatEngineering, solveLinear } from '../solver.js';
+import { analyzeCircuit, formatEngineering, SingularCircuitError, solveLinear } from '../solver.js';
 
 test('solves a two by two linear system', () => {
   assert.deepEqual(solveLinear([[2,1],[1,-1]],[7,2]).map(x=>Math.round(x)), [3,1]);
@@ -24,4 +24,16 @@ test('reports an open circuit', () => {
 test('formats engineering units', () => {
   assert.equal(formatEngineering(0.009,'A'),'9.00 mA');
   assert.equal(formatEngineering(1200,'Ω'),'1.20 kΩ');
+});
+
+test('rejects singular linear systems', () => {
+  assert.throws(() => solveLinear([[1, 1], [2, 2]], [2, 4]), SingularCircuitError);
+});
+
+test('reports floating circuits without returning misleading values', () => {
+  const components = [{ id: 'V1', type: 'voltage', value: 5 }, { id: 'R1', type: 'resistor', value: 100 }];
+  const wires = [{ from: { id: 'V1', terminal: 0 }, to: { id: 'R1', terminal: 0 } }];
+  const result = analyzeCircuit(components, wires);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /open|floating|conflicting/i);
 });

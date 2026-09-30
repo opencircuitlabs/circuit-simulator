@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="A friendly, interactive DC circuit simulator from OpenCircuitLabs." />
+  <meta name="theme-color" content="#162033" />
   <title>OpenCircuit — DC Circuit Simulator</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -23,6 +26,7 @@
       <button class="icon-button" id="redoBtn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
       <button class="quiet-button" id="importBtn">Import</button>
       <button class="quiet-button" id="exportBtn">Export</button>
+      <button class="quiet-button" id="shareBtn">Share</button>
       <button class="primary-button" id="saveBtn">Save locally</button>
       <input id="fileInput" type="file" accept="application/json,.json" hidden />
     </nav>
@@ -66,7 +70,7 @@
     <section class="workspace-panel">
       <div class="workspace-toolbar">
         <div class="tool-mode"><span class="mode-dot"></span><b id="toolLabel">Place resistor</b><span>Click empty space to add</span></div>
-        <div class="zoom-controls"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLabel">100%</span><button id="zoomIn" aria-label="Zoom in">＋</button><button id="fitBtn">Fit</button></div>
+        <div class="toolbar-actions"><button class="snap-button active" id="snapBtn" aria-pressed="true">Snap</button><div class="zoom-controls"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLabel">100%</span><button id="zoomIn" aria-label="Zoom in">＋</button><button id="fitBtn">Fit</button></div></div>
       </div>
       <div class="canvas-wrap" id="canvasWrap">
         <svg id="circuitCanvas" viewBox="0 0 1000 680" role="application" aria-label="Circuit design canvas">
@@ -110,7 +114,7 @@
         <div id="resultList" class="result-list"></div>
         <div class="safety-note" id="safetyNote"><b>Workbench note</b><p>Results use an idealized linear DC model for learning and prototyping.</p></div>
       </div>
-      <footer class="inspector-footer"><span>OpenCircuit v1.0</span><a href="https://github.com/opencircuitlabs/circuit-simulator" target="_blank" rel="noreferrer">View source ↗</a></footer>
+      <footer class="inspector-footer"><span>OpenCircuit v1.1</span><a href="https://github.com/opencircuitlabs/circuit-simulator" target="_blank" rel="noreferrer">View source ↗</a></footer>
     </aside>
   </main>
 

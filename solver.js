@@ -1,12 +1,19 @@
 const EPS = 1e-10;
 
+export class SingularCircuitError extends Error {
+  constructor() {
+    super('The circuit has no unique DC solution');
+    this.name = 'SingularCircuitError';
+  }
+}
+
 export function solveLinear(matrix, rhs) {
   const n = rhs.length;
   const a = matrix.map((row, i) => [...row, rhs[i]]);
   for (let col = 0; col < n; col++) {
     let pivot = col;
     for (let row = col + 1; row < n; row++) if (Math.abs(a[row][col]) > Math.abs(a[pivot][col])) pivot = row;
-    if (Math.abs(a[pivot][col]) < EPS) continue;
+    if (Math.abs(a[pivot][col]) < EPS) throw new SingularCircuitError();
     [a[col], a[pivot]] = [a[pivot], a[col]];
     const p = a[col][col];
     for (let j = col; j <= n; j++) a[col][j] /= p;
@@ -64,7 +71,15 @@ export function analyzeCircuit(components, wires) {
     z[row] = Number(c.value) || 0;
   });
 
-  const values = solveLinear(A, z);
+  let values;
+  try {
+    values = solveLinear(A, z);
+  } catch (error) {
+    if (error instanceof SingularCircuitError) {
+      return { ok: false, message: 'Circuit is open, floating, or has conflicting sources', components: {} };
+    }
+    throw error;
+  }
   if (values.some(v => !Number.isFinite(v))) return { ok: false, message: 'Circuit could not be solved', components: {} };
   const voltageAt = n => n === ground ? 0 : (values[ni(n)] || 0);
   const result = {};
@@ -73,11 +88,10 @@ export function analyzeCircuit(components, wires) {
     const current = c.type === 'voltage' ? (values[nodes.length + sources.indexOf(c)] || 0) : v / resistance(c);
     result[c.id] = { voltage: v, current, power: Math.abs(v * current) };
   });
-  const connected = wires.length >= components.length;
   const hasCurrent = Object.values(result).some(r => Math.abs(r.current) > 1e-7);
   return {
-    ok: connected && hasCurrent,
-    message: connected && hasCurrent ? 'Simulation running — values are live' : 'Circuit is open — complete the loop',
+    ok: hasCurrent,
+    message: hasCurrent ? 'Simulation running — values are live' : 'Circuit is open — complete the loop',
     components: result,
     totalPower: components.filter(c => c.type !== 'voltage').reduce((sum, c) => sum + (result[c.id]?.power || 0), 0)
   };

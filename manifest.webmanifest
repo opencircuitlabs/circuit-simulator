@@ -1,0 +1,12 @@
+{
+  "name": "OpenCircuit Simulator",
+  "short_name": "OpenCircuit",
+  "description": "An approachable browser-based DC circuit simulator.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f5f7",
+  "theme_color": "#162033",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

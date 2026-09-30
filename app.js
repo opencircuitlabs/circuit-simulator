@@ -1,4 +1,5 @@
 import { analyzeCircuit, formatEngineering } from './solver.js';
+import { decodeProject, encodeProject, normalizeProject } from './project.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const meta = {
@@ -28,16 +29,17 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const canvas = $('#circuitCanvas'), componentLayer = $('#componentLayer'), wireLayer = $('#wireLayer');
 let state = { name:'Untitled circuit', components:[], wires:[], selected:null, selectedWire:null, connecting:null, placing:'resistor', results:null };
-let history = [], future = [], zoom = 1, toastTimer;
+let history = [], future = [], zoom = 1, snapEnabled = true, toastTimer;
 
 function uid(type) { const prefix = meta[type].short; let i = 1; while (state.components.some(c => c.id === prefix+i)) i++; return prefix+i; }
 function snapshot() { return JSON.stringify({name:state.name,components:state.components,wires:state.wires}); }
 function pushHistory() { history.push(snapshot()); if(history.length>60) history.shift(); future=[]; updateHistoryButtons(); }
-function restore(raw) { const x=JSON.parse(raw); state={...state,...x,selected:null,selectedWire:null,connecting:null,results:null}; $('#projectName').value=state.name; render(); }
+function restore(raw) { const x=normalizeProject(typeof raw==='string'?JSON.parse(raw):raw); state={...state,...x,selected:null,selectedWire:null,connecting:null,results:null}; $('#projectName').value=state.name; render(); }
 function undo() { if(!history.length)return; future.push(snapshot()); restore(history.pop()); updateHistoryButtons(); }
 function redo() { if(!future.length)return; history.push(snapshot()); restore(future.pop()); updateHistoryButtons(); }
 function updateHistoryButtons(){ $('#undoBtn').disabled=!history.length; $('#redoBtn').disabled=!future.length; }
 function showToast(text){ const t=$('#toast');t.textContent=text;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),1800); }
+function snap(value){ return snapEnabled ? Math.round(value / 24) * 24 : value; }
 
 function svgEl(tag, attrs={}) { const el=document.createElementNS(SVG_NS,tag); Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v)); return el; }
 function terminals(c){ return [{x:c.x-75,y:c.y},{x:c.x+75,y:c.y}]; }
@@ -63,12 +65,12 @@ function render(){
 }
 function bindCanvasItems(){
   $$('.component').forEach(g=>{ g.addEventListener('click',e=>{e.stopPropagation(); const terminal=e.target.dataset.terminal; if(terminal!==undefined){handleTerminal(g.dataset.id,Number(terminal));return;} state.selected=g.dataset.id;state.selectedWire=null;render();});
-    let start=null; g.addEventListener('pointerdown',e=>{if(e.target.dataset.terminal!==undefined)return;start={x:e.clientX,y:e.clientY,c:state.components.find(c=>c.id===g.dataset.id),ox:0,oy:0};start.ox=start.c.x;start.oy=start.c.y;g.setPointerCapture(e.pointerId)});g.addEventListener('pointermove',e=>{if(!start)return;const box=canvas.getBoundingClientRect();start.c.x=Math.max(85,Math.min(915,start.ox+(e.clientX-start.x)*1000/box.width));start.c.y=Math.max(70,Math.min(610,start.oy+(e.clientY-start.y)*680/box.height));render()});g.addEventListener('pointerup',()=>{if(start){pushHistory();start=null;}})
+    let start=null; g.addEventListener('pointerdown',e=>{if(e.target.dataset.terminal!==undefined)return;start={x:e.clientX,y:e.clientY,c:state.components.find(c=>c.id===g.dataset.id),ox:0,oy:0};start.ox=start.c.x;start.oy=start.c.y;g.setPointerCapture(e.pointerId)});g.addEventListener('pointermove',e=>{if(!start)return;const box=canvas.getBoundingClientRect();start.c.x=Math.max(85,Math.min(915,snap(start.ox+(e.clientX-start.x)*1000/box.width)));start.c.y=Math.max(70,Math.min(610,snap(start.oy+(e.clientY-start.y)*680/box.height)));render()});g.addEventListener('pointerup',()=>{if(start){pushHistory();start=null;}})
   });
   $$('.wire').forEach(p=>p.addEventListener('click',e=>{e.stopPropagation();state.selectedWire=Number(p.dataset.wire);state.selected=null;render();}));
 }
 function handleTerminal(id,terminal){ if(!state.connecting){state.connecting={id,terminal};showToast('Now choose another terminal');render();return;} if(state.connecting.id===id&&state.connecting.terminal===terminal){state.connecting=null;render();return;} const duplicate=state.wires.some(w=>(w.from.id===state.connecting.id&&w.from.terminal===state.connecting.terminal&&w.to.id===id&&w.to.terminal===terminal)||(w.to.id===state.connecting.id&&w.to.terminal===state.connecting.terminal&&w.from.id===id&&w.from.terminal===terminal));if(!duplicate){pushHistory();state.wires.push({from:state.connecting,to:{id,terminal}});}state.connecting=null;simulate(false);render(); }
-function addComponent(type,x,y){ pushHistory(); const c={id:uid(type),type,x,y,value:meta[type].value,label:meta[type].name,on:false};state.components.push(c);state.selected=c.id;render();showToast(`${meta[type].name} added`); }
+function addComponent(type,x,y){ pushHistory(); const c={id:uid(type),type,x:snap(x),y:snap(y),value:meta[type].value,label:meta[type].name,on:false};state.components.push(c);state.selected=c.id;render();showToast(`${meta[type].name} added`); }
 function removeSelected(){ if(state.selected){pushHistory();state.components=state.components.filter(c=>c.id!==state.selected);state.wires=state.wires.filter(w=>w.from.id!==state.selected&&w.to.id!==state.selected);state.selected=null;}else if(state.selectedWire!==null){pushHistory();state.wires.splice(state.selectedWire,1);state.selectedWire=null;}simulate(false);render(); }
 function simulate(notify=true){state.results=analyzeCircuit(state.components,state.wires);$('#analysisStatus').textContent=state.results.message;$('#runBtn').classList.toggle('running',state.results.ok);$('#runBtn').innerHTML=state.results.ok?'<span>■</span> Simulation live':'<span>▶</span> Run simulation';document.querySelector('.pulse').classList.toggle('live',state.results.ok);if(notify)showToast(state.results.message);updateResults();}
 function updateInspector(){ const c=state.components.find(x=>x.id===state.selected);$('#noSelection').classList.toggle('hidden',!!c);$('#propertiesForm').classList.toggle('hidden',!c);if(!c)return; const m=meta[c.type];$('#selectedIcon').textContent=m.short;$('#selectedTitle').textContent=m.name;$('#propLabel').value=c.label||c.id;$('#valueField').classList.toggle('hidden',c.type==='switch');$('#switchControl').classList.toggle('hidden',c.type!=='switch');$('#switchState').textContent=c.on?'Closed':'Open';$('#propValue').value=c.value;$('#valueLabel').textContent=c.type==='voltage'?'Voltage':c.type==='led'?'Forward voltage':'Resistance';$('#propUnit').innerHTML=unitOptions[c.type].map(([u,f])=>`<option value="${f}">${u}</option>`).join('');const r=state.results?.components?.[c.id];$('#selectedCurrent').textContent=r?formatEngineering(r.current,'A'):'—';$('#selectedVoltage').textContent=r?`Voltage drop ${formatEngineering(r.voltage,'V')}`:'Voltage drop —'; }
@@ -77,12 +79,18 @@ function loadExample(key){pushHistory();const x=structuredClone(examples[key]);s
 function saveLocal(){state.name=$('#projectName').value.trim()||'Untitled circuit';localStorage.setItem('opencircuit-project',snapshot());$('#savedState').textContent='Saved locally';showToast('Project saved in this browser');}
 function exportProject(){const blob=new Blob([snapshot()],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${state.name.toLowerCase().replace(/[^a-z0-9]+/g,'-')||'circuit'}.json`;a.click();URL.revokeObjectURL(a.href);showToast('Circuit exported');}
 function importProject(file){const reader=new FileReader();reader.onload=()=>{try{pushHistory();restore(reader.result);simulate(false);showToast('Circuit imported')}catch{showToast('That file is not a valid circuit')}};reader.readAsText(file);}
+async function shareProject(){
+  state.name=$('#projectName').value.trim()||'Untitled circuit';
+  const url=new URL(location.href);url.hash=`circuit=${encodeProject(JSON.parse(snapshot()))}`;
+  try{await navigator.clipboard.writeText(url.href);showToast('Share link copied')}catch{location.hash=url.hash;showToast('Share link added to the address bar')}
+}
 
 $('#componentGrid').addEventListener('click',e=>{const b=e.target.closest('[data-type]');if(!b)return;state.placing=b.dataset.type;$$('.component-tile').forEach(x=>x.classList.toggle('active',x===b));$('#toolLabel').textContent=`Place ${meta[state.placing].name.toLowerCase()}`;});
 canvas.addEventListener('click',e=>{if(e.target.closest('.component,.wire'))return;const box=canvas.getBoundingClientRect();const x=(e.clientX-box.left)*1000/box.width,y=(e.clientY-box.top)*680/box.height;addComponent(state.placing,x,y)});
 $$('[data-example]').forEach(b=>b.addEventListener('click',()=>loadExample(b.dataset.example)));
 $('#newBtn').addEventListener('click',()=>{pushHistory();state={...state,name:'Untitled circuit',components:[],wires:[],selected:null,selectedWire:null,results:null};$('#projectName').value=state.name;render()});
 $('#runBtn').addEventListener('click',()=>simulate());$('#deleteBtn').addEventListener('click',removeSelected);$('#undoBtn').addEventListener('click',undo);$('#redoBtn').addEventListener('click',redo);$('#saveBtn').addEventListener('click',saveLocal);$('#exportBtn').addEventListener('click',exportProject);$('#importBtn').addEventListener('click',()=>$('#fileInput').click());$('#fileInput').addEventListener('change',e=>e.target.files[0]&&importProject(e.target.files[0]));
+$('#shareBtn').addEventListener('click',shareProject);$('#snapBtn').addEventListener('click',()=>{snapEnabled=!snapEnabled;$('#snapBtn').classList.toggle('active',snapEnabled);$('#snapBtn').setAttribute('aria-pressed',String(snapEnabled));showToast(`Snap to grid ${snapEnabled?'on':'off'}`)});
 $('#projectName').addEventListener('change',e=>{state.name=e.target.value;render()});
 $('#propLabel').addEventListener('change',e=>{const c=state.components.find(x=>x.id===state.selected);if(c){pushHistory();c.label=e.target.value;render()}});
 $('#propValue').addEventListener('change',e=>{const c=state.components.find(x=>x.id===state.selected);if(c){pushHistory();c.value=Math.max(.001,Number(e.target.value))*Number($('#propUnit').value);simulate(false);render()}});
@@ -93,4 +101,6 @@ function setZoom(z){zoom=Math.max(.7,Math.min(1.35,z));canvas.style.transform=`s
 $('#zoomIn').addEventListener('click',()=>setZoom(zoom+.1));$('#zoomOut').addEventListener('click',()=>setZoom(zoom-.1));$('#fitBtn').addEventListener('click',()=>setZoom(1));
 document.addEventListener('keydown',e=>{if(['INPUT','SELECT'].includes(e.target.tagName))return;if(e.key==='Delete'||e.key==='Backspace')removeSelected();if(e.key==='Escape'){state.connecting=null;state.selected=null;state.selectedWire=null;render()}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo()}});
 
-const saved=localStorage.getItem('opencircuit-project');if(saved){try{restore(saved);$('#savedState').textContent='Saved locally'}catch{loadExample('ohm')}}else loadExample('led');updateHistoryButtons();
+const shared=new URLSearchParams(location.hash.slice(1)).get('circuit');const saved=localStorage.getItem('opencircuit-project');
+if(shared){try{restore(decodeProject(shared));simulate(false);$('#savedState').textContent='Shared circuit';showToast('Shared circuit loaded')}catch{loadExample('ohm');showToast('Share link is invalid')}}else if(saved){try{restore(saved);$('#savedState').textContent='Saved locally'}catch{loadExample('ohm')}}else loadExample('led');updateHistoryButtons();
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
